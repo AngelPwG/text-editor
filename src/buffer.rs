@@ -23,6 +23,12 @@ impl GapBuffer {
             self.gap_end = self.gap_start + 99;
         }
     }
+    pub fn load(&mut self, data: Vec<u8>) {
+        self.buffer = data;
+        self.buffer.splice(..0, vec![0u8; 100]);
+        self.gap_start = 0;
+        self.gap_end = 99;
+    }
     pub fn move_left(&mut self) {
         if self.gap_start == 0 {
             return;
@@ -112,6 +118,13 @@ impl GapBuffer {
                 self.move_right();
             }
         }
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.buffer[..self.gap_start]
+            .iter()
+            .chain(self.buffer[self.gap_end + 1..].iter())
+            .cloned()
+            .collect::<Vec<_>>()
     }
     pub fn lines(&self) -> Vec<Vec<u8>> {
         let mut lines = Vec::new();

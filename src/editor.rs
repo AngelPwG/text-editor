@@ -1,8 +1,9 @@
 use crate::buffer::GapBuffer;
 use crate::terminal::{Key, Terminal};
-use std::io::{Cursor, Write};
+use std::io::Write;
 
 pub struct Editor {
+    filename: String,
     buffer: GapBuffer,
     terminal: Terminal,
     width: usize,
@@ -11,13 +12,15 @@ pub struct Editor {
     cursor_y: usize,
     scroll_y: usize,
     gutter_width: usize,
+    was_changed: bool,
 }
 
 impl Editor {
-    pub fn new() -> Self {
+    pub fn new(filename: String) -> Self {
         let terminal = Terminal::new();
         let (width, height) = terminal.get_size().unwrap_or((80, 24));
         Self {
+            filename,
             buffer: GapBuffer::new(),
             terminal,
             width,
@@ -26,10 +29,12 @@ impl Editor {
             cursor_y: 1,
             scroll_y: 0,
             gutter_width: 2,
+            was_changed: false,
         }
     }
 
     pub fn run(&mut self) {
+        self.open();
         _ = self.terminal.enable_raw_mode();
         loop {
             self.recalc_cursor();
@@ -38,14 +43,23 @@ impl Editor {
             if let Some(key) = self.terminal.read_key().ok() {
                 match key {
                     Key::Ctrl(b'q') => break,
+                    Key::Ctrl(b's') => {
+                        if self.was_changed {
+                            self.save();
+                            self.was_changed = false;
+                        }
+                    }
                     Key::Char(b) => {
                         self.buffer.insert(b);
+                        self.was_changed = true;
                     }
                     Key::Backspace => {
                         self.buffer.delete();
+                        self.was_changed = true;
                     }
                     Key::Enter => {
                         self.buffer.insert(b'\n');
+                        self.was_changed = true;
                     }
                     Key::ArrowUp => {
                         if self.cursor_y != 1 {
@@ -102,10 +116,6 @@ impl Editor {
         );
         std::io::stdout().flush().unwrap();
     }
-    // el programa panickea al momento de escribir muchos enter y saltar de pagina muchas veces
-    // por alguna razon cada vez da mas espacios en vez de siempre dar uno solo
-    // ademas de que el cursor se desacomoda llendose una linea antes a donde
-    // se supone que deberia ir
     fn update_scroll(&mut self) {
         if self.cursor_y >= self.scroll_y + self.height {
             self.scroll_y += 1;
@@ -119,5 +129,14 @@ impl Editor {
         let (cursor_x, cursor_y) = self.buffer.recalc_cursor();
         self.cursor_x = cursor_x;
         self.cursor_y = cursor_y;
+    }
+
+    fn open(&mut self) {
+        self.buffer
+            .load(std::fs::read(&self.filename).unwrap_or_default());
+        self.recalc_cursor();
+    }
+    fn save(&mut self) {
+        std::fs::write(&self.filename, self.buffer.to_bytes()).unwrap();
     }
 }
