@@ -1,3 +1,7 @@
+mod buffer;
+mod editor;
+mod terminal;
+use editor::Editor;
 fn main() {
-    println!("Hello, world!");
+    Editor::new().run();
 }
