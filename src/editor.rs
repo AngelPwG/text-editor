@@ -1,3 +1,5 @@
+use libc::{MODULE_INIT_IGNORE_MODVERSIONS, QFMT_VFS_OLD};
+
 use crate::buffer::GapBuffer;
 use crate::terminal::{Key, Terminal};
 use std::io::Write;
@@ -6,6 +8,7 @@ pub enum Mode {
     Normal,
     Command,
     Insert,
+    SaveAs(bool),
 }
 
 pub struct Editor {
@@ -59,6 +62,11 @@ impl Editor {
                         }
                     }
                     Mode::Normal => self.process_normal(key),
+                    Mode::SaveAs(quit) => {
+                        if self.process_save_as(key, quit) {
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -66,15 +74,55 @@ impl Editor {
         _ = self.terminal.disable_raw_mode();
     }
 
+    pub fn process_save_as(&mut self, key: Key, quit: bool) -> bool {
+        match key {
+            Key::Enter => {
+                self.filename = String::from_utf8_lossy(&self.command_buffer)
+                    .trim()
+                    .to_string();
+                self.save();
+                self.was_changed = false;
+                quit
+            }
+            Key::Char(c) => {
+                self.command_buffer.push(c);
+                false
+            }
+            Key::Escape => {
+                self.mode = Mode::Normal;
+                self.command_buffer.clear();
+                false
+            }
+            Key::Backspace => {
+                if self.command_buffer.is_empty() {
+                    return false;
+                }
+                self.command_buffer.pop();
+                false
+            }
+            _ => false,
+        }
+    }
+
     pub fn execute_command(&mut self) -> bool {
         match String::from_utf8_lossy(&self.command_buffer).trim() {
             "w" => {
+                if self.filename == "" {
+                    self.mode = Mode::SaveAs(false);
+                    self.command_buffer.clear();
+                    return false;
+                }
                 self.save();
                 self.was_changed = false;
                 false
             }
             "q" => true,
             "wq" => {
+                if self.filename == "" {
+                    self.mode = Mode::SaveAs(true);
+                    self.command_buffer.clear();
+                    return false;
+                }
                 self.save();
                 self.was_changed = false;
                 true
