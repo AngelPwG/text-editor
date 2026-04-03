@@ -1,5 +1,3 @@
-use libc::{MODULE_INIT_IGNORE_MODVERSIONS, QFMT_VFS_OLD};
-
 use crate::buffer::GapBuffer;
 use crate::terminal::{Key, Terminal};
 use std::io::Write;
@@ -47,7 +45,9 @@ impl Editor {
     }
 
     pub fn run(&mut self) {
-        self.open();
+        if !self.filename.is_empty() {
+            self.open();
+        }
         _ = self.terminal.enable_raw_mode();
         loop {
             self.recalc_cursor();
@@ -82,6 +82,8 @@ impl Editor {
                     .to_string();
                 self.save();
                 self.was_changed = false;
+                self.command_buffer.clear();
+                self.mode = Mode::Normal;
                 quit
             }
             Key::Char(c) => {
@@ -107,24 +109,25 @@ impl Editor {
     pub fn execute_command(&mut self) -> bool {
         match String::from_utf8_lossy(&self.command_buffer).trim() {
             "w" => {
-                if self.filename == "" {
+                if self.filename.is_empty() {
                     self.mode = Mode::SaveAs(false);
                     self.command_buffer.clear();
-                    return false;
+                } else {
+                    self.save();
+                    self.was_changed = false;
                 }
-                self.save();
-                self.was_changed = false;
                 false
             }
             "q" => true,
             "wq" => {
-                if self.filename == "" {
+                if self.filename.is_empty() {
                     self.mode = Mode::SaveAs(true);
                     self.command_buffer.clear();
                     return false;
+                } else {
+                    self.save();
+                    self.was_changed = false;
                 }
-                self.save();
-                self.was_changed = false;
                 true
             }
             _ => false,
@@ -137,7 +140,6 @@ impl Editor {
                 if self.execute_command() {
                     return true;
                 }
-                self.mode = Mode::Normal;
                 self.command_buffer.clear();
             }
             Key::Backspace => {
@@ -146,7 +148,7 @@ impl Editor {
             Key::Char(b) => {
                 self.command_buffer.push(b);
             }
-            Key::Escape => {
+            Key::Mouse(_, _) => {
                 self.mode = Mode::Normal;
                 self.command_buffer.clear();
             }
@@ -275,7 +277,9 @@ impl Editor {
                 String::from_utf8_lossy(&self.command_buffer)
             ),
             Mode::Insert => print!(" --INSERT"),
+            Mode::SaveAs(_) => print!("Save As: {}", String::from_utf8_lossy(&self.command_buffer)),
         }
+        print!("  {}", self.filename);
         print!(
             "\x1B[{};{}H",
             self.cursor_y - self.scroll_y,
